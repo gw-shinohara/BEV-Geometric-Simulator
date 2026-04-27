@@ -819,7 +819,7 @@ function rectifiedStereoBaseline() {
     && Math.abs(baselineForward) < 1e-6;
   return {
     aligned,
-    baseline: Math.abs(baselineRight),
+    baseline: baselineRight,
   };
 }
 
@@ -879,19 +879,22 @@ function bottomDisparityMatches(leftBBox, subBBox, extraPx = state.bev.pixelTol)
 function bboxDisparityBounds(leftBBox, subBBox) {
   if (!leftBBox || !subBBox) return null;
   const rectified = rectifiedStereoBaseline();
-  if (!rectified.aligned || rectified.baseline <= 1e-9) return null;
+  if (!rectified.aligned || Math.abs(rectified.baseline) <= 1e-9) return null;
   const k = intrinsics();
   const tol = Math.max(0.25, state.bev.pixelTol);
   const centerDisparity = ((leftBBox.left + leftBBox.right) * 0.5) - ((subBBox.left + subBBox.right) * 0.5);
   if (!Number.isFinite(centerDisparity)) return null;
-  const safeCenter = Math.max(1e-6, centerDisparity);
+  if (Math.sign(centerDisparity) !== Math.sign(rectified.baseline)) return null;
+  const absBaseline = Math.abs(rectified.baseline);
+  const absDisparity = Math.abs(centerDisparity);
+  const safeCenter = Math.max(1e-6, absDisparity);
   const centerNearDisparity = safeCenter + tol;
   const centerFarDisparity = Math.max(1e-6, safeCenter - tol);
   return {
     centerDisparity: safeCenter,
-    nearDepth: (k.fx * rectified.baseline) / centerNearDisparity,
-    centerDepth: (k.fx * rectified.baseline) / safeCenter,
-    farDepth: (k.fx * rectified.baseline) / centerFarDisparity,
+    nearDepth: (k.fx * absBaseline) / centerNearDisparity,
+    centerDepth: (k.fx * absBaseline) / safeCenter,
+    farDepth: (k.fx * absBaseline) / centerFarDisparity,
   };
 }
 
@@ -908,16 +911,20 @@ function bboxPixels(bbox) {
 function disparityDepthEstimate(match, disparityTolerancePx = state.bev.pixelTol) {
   if (!match) return null;
   const rectified = rectifiedStereoBaseline();
-  if (!rectified.aligned || rectified.baseline <= 1e-9) return null;
+  if (!rectified.aligned || Math.abs(rectified.baseline) <= 1e-9) return null;
   const k = intrinsics();
-  const disparity = match.left.u - match.right.u;
-  if (!Number.isFinite(disparity) || disparity <= 1e-6) return null;
+  const signedDisparity = match.left.u - match.right.u;
+  if (!Number.isFinite(signedDisparity)) return null;
+  if (Math.sign(signedDisparity) !== Math.sign(rectified.baseline)) return null;
+  const absBaseline = Math.abs(rectified.baseline);
+  const disparity = Math.abs(signedDisparity);
+  if (disparity <= 1e-6) return null;
   const tol = Math.max(0.25, disparityTolerancePx);
   const disparityNear = disparity + tol;
   const disparityFar = Math.max(1e-6, disparity - tol);
-  const centerDepth = (k.fx * rectified.baseline) / disparity;
-  const nearDepth = (k.fx * rectified.baseline) / disparityNear;
-  const farDepth = (k.fx * rectified.baseline) / disparityFar;
+  const centerDepth = (k.fx * absBaseline) / disparity;
+  const nearDepth = (k.fx * absBaseline) / disparityNear;
+  const farDepth = (k.fx * absBaseline) / disparityFar;
   const center = pointFromPixelDepth(match.left.u, match.left.v, centerDepth, leftCameraPose());
   const near = pointFromPixelDepth(match.left.u, match.left.v, nearDepth, leftCameraPose());
   const far = pointFromPixelDepth(match.left.u, match.left.v, farDepth, leftCameraPose());
