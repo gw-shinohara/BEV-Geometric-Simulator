@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>撮像・BEV 幾何シミュレータ</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <aside class="controls" aria-label="設定">
+        <header class="app-title">
+          <h1>撮像・BEV 幾何シミュレータ</h1>
+          <p>カメラ、地面、物体を配置し、撮像bboxからBEV上の存在可能範囲を確認します。</p>
+        </header>
+
+        <section class="control-section collapsed" data-config-panel="layout">
+          <button class="section-heading" type="button" aria-expanded="false">
+            <span class="section-title"><span class="section-icon" aria-hidden="true">📷</span>カメラ</span>
+            <output id="fovOutput">FOV --</output>
+          </button>
+          <div class="control-body">
+          <div class="control-grid">
+            <label>
+              <span>カメラモデル</span>
+              <select data-key="camera.model">
+                <option value="bbx60">Bumblebee X 60</option>
+                <option value="bbx80">Bumblebee X 80</option>
+                <option value="bbx105">Bumblebee X 105</option>
+              </select>
+            </label>
+            <label>
+              <span>解像度</span>
+              <select data-key="camera.resolutionMode">
+                <option value="full">Full</option>
+                <option value="quarter">Quarter</option>
+              </select>
+            </label>
+            <div class="readout" id="cameraModelOutput">camera model --</div>
+            <label>
+              <span>サブカメラ</span>
+              <select data-key="stereo.mode">
+                <option value="stereoRight">Stereo Right</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
+            <div class="readout" id="subCameraOutput">sub camera --</div>
+          </div>
+          <div class="slider-list">
+            <label><span>X m</span><input data-key="camera.x" type="range" min="-150" max="150" step="0.5" /></label>
+            <label><span>高さ m</span><input data-key="camera.y" type="range" min="0.3" max="30" step="0.05" /></label>
+            <label><span>Z m</span><input data-key="camera.z" type="range" min="-300" max="300" step="0.5" /></label>
+            <label><span>Yaw deg</span><input data-key="camera.yaw" type="range" min="-180" max="180" step="1" /></label>
+            <label><span>Pitch down deg</span><input data-key="camera.pitch" type="range" min="0" max="75" step="1" /></label>
+            <label class="stereo-manual"><span>Sub X m</span><input data-key="stereo.manualX" type="range" min="-150" max="150" step="0.5" /></label>
+            <label class="stereo-manual"><span>Sub 高さ m</span><input data-key="stereo.manualY" type="range" min="0.3" max="30" step="0.05" /></label>
+            <label class="stereo-manual"><span>Sub Z m</span><input data-key="stereo.manualZ" type="range" min="-300" max="300" step="0.5" /></label>
+            <label class="stereo-manual"><span>Sub Yaw deg</span><input data-key="stereo.manualYaw" type="range" min="-180" max="180" step="1" /></label>
+            <label class="stereo-manual"><span>Sub Pitch deg</span><input data-key="stereo.manualPitch" type="range" min="0" max="75" step="1" /></label>
+          </div>
+          </div>
+        </section>
+
+        <section class="control-section collapsed" data-config-panel="layout">
+          <button class="section-heading" type="button" aria-expanded="false">
+            <span class="section-title"><span class="section-icon" aria-hidden="true">🚗</span>物体</span>
+            <output id="bboxOutput">bbox --</output>
+          </button>
+          <div class="control-body">
+          <div class="status-line" id="contactOutput">接地状態 --</div>
+          <div class="control-grid">
+            <label>
+              <span>表現</span>
+              <select data-key="object.mode">
+                <option value="box">3D直方体</option>
+                <option value="point">Point</option>
+              </select>
+            </label>
+          </div>
+          <div class="slider-list">
+            <label><span>X m</span><input data-key="object.x" type="range" min="-150" max="150" step="0.5" /></label>
+            <label><span>Z m</span><input data-key="object.z" data-slider-mode="object-z-log" type="range" min="0" max="1000" step="1" /></label>
+            <label><span>Yaw deg</span><input data-key="object.yaw" type="range" min="-180" max="180" step="1" /></label>
+            <label><span>幅 m</span><input data-key="object.w" type="range" min="0.05" max="50" step="0.05" /></label>
+            <label><span>高さ m</span><input data-key="object.h" type="range" min="0.05" max="50" step="0.05" /></label>
+            <label><span>奥行 m</span><input data-key="object.d" type="range" min="0.05" max="50" step="0.05" /></label>
+            <label><span>接地高さ m</span><input data-key="object.lift" type="range" min="0" max="30" step="0.05" /></label>
+          </div>
+          </div>
+        </section>
+
+        <section class="control-section collapsed" data-config-panel="layout">
+          <button class="section-heading" type="button" aria-expanded="false">
+            <span class="section-title"><span class="section-icon" aria-hidden="true">🛣️</span>地面</span>
+            <output id="areaOutput">area --</output>
+          </button>
+          <div class="control-body">
+          <div class="control-grid">
+            <label>
+              <span>地形タイプ</span>
+              <select data-key="ground.type">
+                <option value="flat">平面</option>
+                <option value="uphillRoad">上り坂道</option>
+                <option value="downhillRoad">下り坂道</option>
+                <option value="sideUp">両脇上り坂</option>
+                <option value="sideDown">両脇下り坂</option>
+              </select>
+            </label>
+            <label>
+              <span>道幅 m</span>
+              <input data-key="ground.roadWidth" type="number" min="1" max="80" step="0.5" />
+            </label>
+            <label>
+              <span>脇坂幅 m</span>
+              <input data-key="ground.sideWidth" type="number" min="0.5" max="120" step="0.5" />
+            </label>
+          </div>
+          <div class="slider-list">
+            <label><span>基準Y m</span><input data-key="ground.y" type="range" min="-20" max="20" step="0.05" /></label>
+            <label><span>道路勾配 deg</span><input data-key="ground.slope" type="range" min="0" max="25" step="0.5" /></label>
+            <label><span>両脇勾配 deg</span><input data-key="ground.sideSlope" type="range" min="0" max="35" step="0.5" /></label>
+            <label><span>世界表示範囲 m</span><input data-key="bev.extent" type="range" min="10" max="500" step="5" /></label>
+          </div>
+          <div class="actions">
+            <button id="resetButton" type="button">リセット</button>
+            <button id="centerButton" type="button">物体を前方へ</button>
+          </div>
+          </div>
+        </section>
+
+        <section class="control-section collapsed" data-config-panel="bev">
+          <button class="section-heading" type="button" aria-expanded="false">
+            <span class="section-title"><span class="section-icon" aria-hidden="true">🛰️</span>BEV</span>
+            <output id="bevConfigOutput">BEV --</output>
+          </button>
+          <div class="control-body">
+          <div class="control-grid">
+            <label>
+              <span>BEV幅 Unit</span>
+              <input data-key="bev.unitsX" type="number" min="32" max="4096" step="16" />
+            </label>
+            <label>
+              <span>BEV奥行 Unit</span>
+              <input data-key="bev.unitsZ" type="number" min="32" max="4096" step="16" />
+            </label>
+            <label>
+              <span>1Unit長 m</span>
+              <input data-key="bev.unitLength" type="number" min="0.01" max="5" step="0.01" />
+            </label>
+            <label>
+              <span>固定する値</span>
+              <select data-key="bev.lockMode">
+                <option value="unit">1Unit長</option>
+                <option value="resolution">解像度</option>
+              </select>
+            </label>
+            <label class="checkbox-line">
+              <span>物体を奥行中央</span>
+              <input data-key="bev.autoObjectCenter" type="checkbox" />
+            </label>
+          </div>
+          <div class="slider-list">
+            <label><span>bbox誤差 px</span><input data-key="bev.pixelTol" type="range" min="0" max="64" step="0.25" /></label>
+          </div>
+          </div>
+        </section>
+      </aside>
+
+      <section class="workspace" aria-label="可視化">
+        <nav class="tabs" aria-label="フェーズ切替">
+          <button class="active" type="button" data-tab="layout">配置</button>
+          <button type="button" data-tab="bev">BEV確認</button>
+        </nav>
+
+        <section class="tab-panel active" data-panel="layout">
+          <div class="canvas-panel world-panel">
+            <div class="panel-title">
+              <div>
+                <h2>世界配置</h2>
+                <span>上面図: カメラ視錐台 / 物体 / bbox逆投影</span>
+              </div>
+            </div>
+            <div id="worldPlot" class="visualization-plot"></div>
+          </div>
+
+          <div class="canvas-panel image-panel">
+            <div class="panel-title">
+              <h2>撮像</h2>
+              <span>Camera1 / Camera2 の投影bboxと画素量</span>
+            </div>
+            <div class="image-plots">
+              <div id="imagePlot" class="visualization-plot image-split"></div>
+              <div id="imagePlotSub" class="visualization-plot image-split"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="bev">
+          <div class="canvas-panel bev-panel">
+            <div class="panel-title">
+              <h2>BEV変換</h2>
+              <span>画像bboxを地面へ逆投影した存在可能範囲</span>
+            </div>
+            <div id="bevPlot" class="visualization-plot large"></div>
+          </div>
+
+          <div class="canvas-panel bev-zoom-panel">
+            <div class="panel-title">
+              <h2>BEV拡大</h2>
+              <span>物体とBBox Image-&gt;BEVのみをm目盛り付きで拡大表示</span>
+            </div>
+            <div id="bevZoomPlot" class="visualization-plot large"></div>
+          </div>
+
+          <div class="metrics" id="metrics"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
