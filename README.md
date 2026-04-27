@@ -14,6 +14,7 @@
 ## 画面構成
 
 ### 配置
+![world](images/world.png)
 
 - `世界配置`
   - 真値の世界配置を上面図で表示
@@ -24,6 +25,7 @@
   - 左右画像上の bbox と投影点を表示
 
 ### BEV確認
+![bev](images/bev.png)
 
 - `BEV変換`
   - 撮像 bbox から計算した `BBOX existence range`
