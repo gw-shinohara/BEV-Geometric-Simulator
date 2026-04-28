@@ -1087,10 +1087,10 @@ function objectTruthPosition() {
     },
     nearest: nearestFootprint
       ? {
-          x: nearestFootprint.x,
-          y: support.bottomY,
-          z: nearestFootprint.z,
-        }
+        x: nearestFootprint.x,
+        y: support.bottomY,
+        z: nearestFootprint.z,
+      }
       : null,
     footprint: objectFootprint(),
     footprintCenter: polygonCenter(objectFootprint()),
@@ -1288,7 +1288,7 @@ function drawRoadOverlay(ctx, tr, w, h) {
   ];
   const leftShoulder = [
     { x: -halfRoad - sideWidth, z: bounds.minZ },
-    { x: -halfRoad, z: bounds.minZ },
+    { x: -halfRoad, z: minZ },
     { x: -halfRoad, z: bounds.maxZ },
     { x: -halfRoad - sideWidth, z: bounds.maxZ },
   ];
@@ -2278,53 +2278,53 @@ function renderSingleImagePlot(plot, pose, points, bbox, visible, fullyVisible, 
     ...imageBboxTraces(bbox, fullyVisible),
     cornerPoints.length
       ? {
-          type: "scatter",
-          mode: "markers",
-          name: "projected object corners",
-          x: cornerPoints.map((p) => roundPx(p.u)),
-          y: cornerPoints.map((p) => roundPx(p.v)),
-          marker: { color: layerColors.truthStroke, size: 5 },
-          hovertemplate: "u=%{x:.0f}px<br>v=%{y:.0f}px<extra>object corner</extra>",
-        }
+        type: "scatter",
+        mode: "markers",
+        name: "projected object corners",
+        x: cornerPoints.map((p) => roundPx(p.u)),
+        y: cornerPoints.map((p) => roundPx(p.v)),
+        marker: { color: layerColors.truthStroke, size: 5 },
+        hovertemplate: "u=%{x:.0f}px<br>v=%{y:.0f}px<extra>object corner</extra>",
+      }
       : null,
     centerPoint
       ? {
-          type: "scatter",
-          mode: "markers",
-          name: "projected object center",
-          x: [roundPx(centerPoint.u)],
-          y: [roundPx(centerPoint.v)],
-          marker: { color: layerColors.truthCenter, size: 7, line: { color: "#ffffff", width: 1 } },
-          hovertemplate: "u=%{x:.0f}px<br>v=%{y:.0f}px<extra>object center</extra>",
-        }
+        type: "scatter",
+        mode: "markers",
+        name: "projected object center",
+        x: [roundPx(centerPoint.u)],
+        y: [roundPx(centerPoint.v)],
+        marker: { color: layerColors.truthCenter, size: 7, line: { color: "#ffffff", width: 1 } },
+        hovertemplate: "u=%{x:.0f}px<br>v=%{y:.0f}px<extra>object center</extra>",
+      }
       : null,
     orderedSplatPoints.length >= 2
       ? {
-          type: "scatter",
-          mode: "lines",
-          name: "bbox splat band",
-          x: orderedSplatPoints.map((p) => roundPx(p.u)),
-          y: orderedSplatPoints.map((p) => roundPx(p.v)),
-          line: { color: "#ff4fd8", width: 3 },
-          hovertemplate: "u=%{x:.0f}px<br>v=%{y:.0f}px<extra>bbox splat band</extra>",
-        }
+        type: "scatter",
+        mode: "lines",
+        name: "bbox splat band",
+        x: orderedSplatPoints.map((p) => roundPx(p.u)),
+        y: orderedSplatPoints.map((p) => roundPx(p.v)),
+        line: { color: "#ff4fd8", width: 3 },
+        hovertemplate: "u=%{x:.0f}px<br>v=%{y:.0f}px<extra>bbox splat band</extra>",
+      }
       : null,
     orderedSplatPoints.length
       ? {
-          type: "scatter",
-          mode: "markers",
-          name: "bbox splat",
-          x: orderedSplatPoints.map((p) => roundPx(p.u)),
-          y: orderedSplatPoints.map((p) => roundPx(p.v)),
-          marker: {
-            color: "#ff4fd8",
-            size: 10,
-            opacity: 0.95,
-            symbol: "diamond",
-            line: { color: "#ffffff", width: 1.2 },
-          },
-          hovertemplate: "u=%{x:.0f}px<br>v=%{y:.0f}px<extra>bbox splat</extra>",
-        }
+        type: "scatter",
+        mode: "markers",
+        name: "bbox splat",
+        x: orderedSplatPoints.map((p) => roundPx(p.u)),
+        y: orderedSplatPoints.map((p) => roundPx(p.v)),
+        marker: {
+          color: "#ff4fd8",
+          size: 10,
+          opacity: 0.95,
+          symbol: "diamond",
+          line: { color: "#ffffff", width: 1.2 },
+        },
+        hovertemplate: "u=%{x:.0f}px<br>v=%{y:.0f}px<extra>bbox splat</extra>",
+      }
       : null,
     lineTrace("image center H", [{ x: centerU - imgW * 0.03, z: centerV }, { x: centerU + imgW * 0.03, z: centerV }], "#b53232", (p) => ({ x: p.x, y: p.z, text: "" }), 1.8),
     lineTrace("image center V", [{ x: centerU, z: centerV - imgH * 0.03 }, { x: centerU, z: centerV + imgH * 0.03 }], "#b53232", (p) => ({ x: p.x, y: p.z, text: "" }), 1.8),
@@ -2395,6 +2395,68 @@ function bevFramePoly(center) {
   ];
 }
 
+// BBOX格子をBEVにスプラットしてヒートマップを生成する関数
+function bboxSplatHeatmapTrace(proj, imageEstimate, view) {
+  if (!proj || !proj.bbox || !imageEstimate) return null;
+
+  const { left, right } = proj.bbox;
+  const { depthMin, depthMax } = imageEstimate;
+
+  if (depthMin >= depthMax || right <= left) return null;
+
+  const centerBev = view?.centerBev || pointToBev({ x: bevCenter().x, y: state.camera.y, z: bevCenter().z }, leftCameraPose());
+  const extent = view?.extent || Math.max(10, bevSizeMeters().extent);
+
+  const gridSize = 150;
+  const halfExt = extent / 2;
+  const minLat = centerBev.lateral - halfExt;
+  const maxLat = centerBev.lateral + halfExt;
+  const minFwd = centerBev.forward - halfExt;
+  const maxFwd = centerBev.forward + halfExt;
+  const dLat = extent / gridSize;
+  const dFwd = extent / gridSize;
+
+  const zData = Array(gridSize).fill(0).map(() => Array(gridSize).fill(null));
+
+  const uSteps = 100;
+  const dSteps = 100;
+  const k = intrinsics();
+
+  for (let i = 0; i <= uSteps; i++) {
+    const u = left + (right - left) * (i / uSteps);
+    for (let j = 0; j <= dSteps; j++) {
+      const d = depthMin + (depthMax - depthMin) * (j / dSteps);
+
+      const xCam = ((u - k.cx) / k.fx) * d;
+      const zCam = d;
+
+      const xIdx = Math.floor((xCam - minLat) / dLat);
+      const zIdx = Math.floor((zCam - minFwd) / dFwd);
+
+      if (xIdx >= 0 && xIdx < gridSize && zIdx >= 0 && zIdx < gridSize) {
+        zData[zIdx][xIdx] = 1;
+      }
+    }
+  }
+
+  const xData = Array.from({ length: gridSize }, (_, i) => minLat + dLat * (i + 0.5));
+  const yData = Array.from({ length: gridSize }, (_, i) => minFwd + dFwd * (i + 0.5));
+
+  return {
+    type: "heatmap",
+    name: "BBOX Splat Area",
+    x: xData,
+    y: yData,
+    z: zData,
+    colorscale: [
+      [0, "rgba(255, 79, 216, 0)"],
+      [1, "rgba(255, 79, 216, 0.45)"]
+    ],
+    showscale: false,
+    hoverinfo: "skip"
+  };
+}
+
 function renderBevPlot(proj, region, truth, imageEstimate, view = null) {
   const bevSize = bevSizeMeters();
   const center = view?.center || bevCenter();
@@ -2411,7 +2473,12 @@ function renderBevPlot(proj, region, truth, imageEstimate, view = null) {
     objectBboxOnly ? null : polyTrace("road truth", roads.road, layerColors.roadTruthStroke, layerColors.roadTruthFill, mapBev),
     objectBboxOnly ? null : polyTrace("BEV frame", bevFramePoly(bevCenter()), "rgba(23, 32, 42, 0.65)", "rgba(255, 255, 255, 0.10)", mapBev, 2),
     lineTrace("stereo depth band", depthBand ? [depthBand.near, depthBand.far] : null, bboxRegionColors(proj).stroke, mapCameraXZ, 3),
-    polyTrace("BBOX existence range", imageEstimate?.regionBev, "#ff4fd8", "rgba(255, 79, 216, 0.18)", mapCameraXZ, 3),
+
+    // スプラットでのヒートマップ描画
+    bboxSplatHeatmapTrace(proj, imageEstimate, view),
+    // BBOX境界の輪郭線描画
+    polyTrace("BBOX existence range (bounds)", imageEstimate?.regionBev, "#ff4fd8", null, mapCameraXZ, 2, "dot"),
+
     pointTrace("stereo depth", depthBand?.center, bboxRegionColors(proj).stroke, mapCameraXZ, 9, "circle"),
     objectBboxOnly ? null : pointTrace("camera", { x: state.camera.x, z: state.camera.z }, "#17202a", mapBev, 12, "triangle-up"),
     objectBboxOnly ? null : pointTrace("camera2", { x: subCameraPose().x, z: subCameraPose().z }, "#315dba", mapBev, 11, "triangle-up"),
@@ -2427,16 +2494,16 @@ function renderBevPlot(proj, region, truth, imageEstimate, view = null) {
   layout.yaxis.tick0 = 0;
   layout.annotations = depthBand
     ? [
-        {
-          x: depthBand.center.x,
-          y: depthBand.center.z,
-          text: `${format(imageEstimate.depthBand?.center?.z, 1)}m<br><span style="font-size:11px">BBOX range ${format(imageEstimate.depthMin, 1)}-${format(imageEstimate.depthMax, 1)}m</span>`,
-          showarrow: false,
-          yshift: 14,
-          font: { color: bboxRegionColors(proj).stroke, size: 12 },
-          bgcolor: "rgba(255,255,255,0.82)",
-        },
-      ]
+      {
+        x: depthBand.center.x,
+        y: depthBand.center.z,
+        text: `${format(imageEstimate.depthBand?.center?.z, 1)}m<br><span style="font-size:11px">BBOX range ${format(imageEstimate.depthMin, 1)}-${format(imageEstimate.depthMax, 1)}m</span>`,
+        showarrow: false,
+        yshift: 14,
+        font: { color: bboxRegionColors(proj).stroke, size: 12 },
+        bgcolor: "rgba(255,255,255,0.82)",
+      },
+    ]
     : [];
   reactPlot(objectBboxOnly ? plots.bevZoom : plots.bev, data, layout);
 }
@@ -2476,17 +2543,17 @@ function renderBev(proj, region, truth, imageEstimate, nearestImageEstimate, roa
   }
   const legend = objectBboxOnly
     ? [
-        [layerColors.bboxStroke, "bbox bottom + size -> BEV"],
-        [layerColors.truthStroke, "true footprint"],
-      ]
+      [layerColors.bboxStroke, "bbox bottom + size -> BEV"],
+      [layerColors.truthStroke, "true footprint"],
+    ]
     : [
-        ["#17202a", "BEV meter grid"],
-        ["#b53232", "image center depth"],
-        [layerColors.bboxStroke, "bbox bottom + size -> BEV"],
-        [layerColors.nearestStroke, "nearest image -> depth"],
-        [layerColors.roadEstimateStroke, "road image -> BEV"],
-        [layerColors.truthStroke, "true footprint"],
-      ];
+      ["#17202a", "BEV meter grid"],
+      ["#b53232", "image center depth"],
+      [layerColors.bboxStroke, "bbox bottom + size -> BEV"],
+      [layerColors.nearestStroke, "nearest image -> depth"],
+      [layerColors.roadEstimateStroke, "road image -> BEV"],
+      [layerColors.truthStroke, "true footprint"],
+    ];
   drawLegend(ctx, legend);
 }
 
